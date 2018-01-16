@@ -41,7 +41,7 @@ void ibusAnalyzer::WorkerThread()
 	U64 ibusFrameStart=0;
 	U64 lastFrame=0;
 	U16 channelData=0;
-	U64 timeoutFrames = 500000;//U32(double(mSampleRateHz) * 0.001);
+	U64 timeoutFrames = U32(double(mSampleRateHz) * 0.001);
 
 	for( ; ; )
 	{
@@ -93,7 +93,7 @@ void ibusAnalyzer::WorkerThread()
 
 			mResults->AddFrame( frame );
 			mResults->CommitResults();
-			ReportProgress( frame.mEndingSampleInclusive );
+
 		}
 	}
 }
