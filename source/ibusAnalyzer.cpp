@@ -34,15 +34,29 @@ void ibusAnalyzer::WorkerThread()
 	U32 samples_per_bit = mSampleRateHz / mSettings->mBitRate;
 	U32 samples_to_first_center_of_first_data_bit = U32( 1.5 * double( mSampleRateHz ) / double( mSettings->mBitRate ) );
 
+	U8 lowerByte = mSettings->mRCChannel*2 + 1;
+	U8 upperByte = mSettings->mRCChannel*2 + 2;
+
+	U8 msgByteCounter=0;
+	U64 ibusFrameStart=0;
+	U64 lastFrame=0;
+	U16 channelData=0;
+	U64 timeoutFrames = 500000;//U32(double(mSampleRateHz) * 0.001);
+
 	for( ; ; )
 	{
 		U8 data = 0;
-		U8 mask = 1 << 7;
-		
-		mSerial->AdvanceToNextEdge(); //falling edge -- beginning of the start bit
+		U8 mask = 1;
 
+		mSerial->AdvanceToNextEdge(); //falling edge -- beginning of the start bit
 		U64 starting_sample = mSerial->GetSampleNumber();
 
+		if(starting_sample - lastFrame > timeoutFrames){
+			msgByteCounter=0;
+			ibusFrameStart = starting_sample;
+		}
+		lastFrame = mSerial->GetSampleNumber();
+		
 		mSerial->Advance( samples_to_first_center_of_first_data_bit );
 
 		for( U32 i=0; i<8; i++ )
@@ -55,20 +69,32 @@ void ibusAnalyzer::WorkerThread()
 
 			mSerial->Advance( samples_per_bit );
 
-			mask = mask >> 1;
+			mask = mask << 1;
 		}
 
+		msgByteCounter++;
 
-		//we have a byte to save. 
-		Frame frame;
-		frame.mData1 = data;
-		frame.mFlags = 0;
-		frame.mStartingSampleInclusive = starting_sample;
-		frame.mEndingSampleInclusive = mSerial->GetSampleNumber();
+		if(msgByteCounter==lowerByte){
+			channelData = data;
+		}
+		if(msgByteCounter==upperByte){
+			channelData += data*256;
+		}
 
-		mResults->AddFrame( frame );
-		mResults->CommitResults();
-		ReportProgress( frame.mEndingSampleInclusive );
+		if(msgByteCounter==32){
+			//we have a byte to save. 
+			msgByteCounter=0;
+
+			Frame frame;
+			frame.mData1 = channelData;
+			frame.mFlags = 0;
+			frame.mStartingSampleInclusive = ibusFrameStart;
+			frame.mEndingSampleInclusive = mSerial->GetSampleNumber();
+
+			mResults->AddFrame( frame );
+			mResults->CommitResults();
+			ReportProgress( frame.mEndingSampleInclusive );
+		}
 	}
 }
 
